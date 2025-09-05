@@ -1,0 +1,15 @@
+[package]
+name = "proyecto2"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 3
+debug = false
+
+
+[dependencies]
+nalgebra-glm = "0.19"
+minifb = "0.27"
+image = "0.25"
+raylib = "5.5.1"
