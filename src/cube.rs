@@ -63,4 +63,24 @@ impl Cube {
             None
         }
     }
+    
+    pub fn get_normal(&self, point: &Vec3) -> Vec3 {
+        let center = (self.min + self.max) * 0.5;
+        let size = self.max - self.min;
+        let p = point - center;
+        
+        let mut normal = Vec3::new(0.0, 0.0, 0.0);
+        let mut max_component = 0.0;
+        
+        for i in 0..3 {
+            let component = (p[i] / (size[i] * 0.5)).abs();
+            if component > max_component {
+                max_component = component;
+                normal = Vec3::new(0.0, 0.0, 0.0);
+                normal[i] = if p[i] > 0.0 { 1.0 } else { -1.0 };
+            }
+        }
+        
+        normal
+    }
 }
