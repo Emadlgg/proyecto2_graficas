@@ -6,6 +6,7 @@ pub struct Material {
     pub specular: f32,
     pub albedo: [f32; 2], // [diffuse, specular]
     pub refractive_index: f32,
+    pub has_texture: bool, // Nuevo campo para indicar si usa textura
 }
 
 impl Material {
@@ -15,6 +16,17 @@ impl Material {
             specular: 0.0,
             albedo: [1.0, 0.0],
             refractive_index: 1.0,
+            has_texture: false,
+        }
+    }
+    
+    pub fn with_texture(diffuse: Color) -> Self {
+        Material {
+            diffuse,
+            specular: 0.0,
+            albedo: [1.0, 0.0],
+            refractive_index: 1.0,
+            has_texture: true,
         }
     }
     
@@ -25,6 +37,17 @@ impl Material {
             specular: 10.0,
             albedo: [0.9, 0.1],
             refractive_index: 1.0,
+            has_texture: false,
+        }
+    }
+    
+    pub fn old_wood_textured() -> Self {
+        Material {
+            diffuse: Color::new(139, 90, 43), // Color base en caso de que no haya textura
+            specular: 10.0,
+            albedo: [0.9, 0.1],
+            refractive_index: 1.0,
+            has_texture: true,
         }
     }
     
@@ -34,6 +57,7 @@ impl Material {
             specular: 50.0,
             albedo: [0.6, 0.3],
             refractive_index: 1.0,
+            has_texture: false,
         }
     }
     
@@ -43,6 +67,7 @@ impl Material {
             specular: 125.0,
             albedo: [0.0, 0.5],
             refractive_index: 1.5,
+            has_texture: false,
         }
     }
     
@@ -52,6 +77,7 @@ impl Material {
             specular: 100.0,
             albedo: [0.4, 0.6],
             refractive_index: 2.4,
+            has_texture: false,
         }
     }
     
@@ -61,6 +87,7 @@ impl Material {
             specular: 5.0,
             albedo: [0.9, 0.1],
             refractive_index: 1.0,
+            has_texture: false,
         }
     }
 }

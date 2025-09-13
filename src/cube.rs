@@ -83,4 +83,34 @@ impl Cube {
         
         normal
     }
+    
+    pub fn get_uv_coordinates(&self, point: &Vec3) -> (f32, f32) {
+        let center = (self.min + self.max) * 0.5;
+        let size = self.max - self.min;
+        let p = point - center;
+        
+        // Determinar qué cara fue golpeada basándose en cuál componente es mayor
+        let abs_x = (p.x / (size.x * 0.5)).abs();
+        let abs_y = (p.y / (size.y * 0.5)).abs();
+        let abs_z = (p.z / (size.z * 0.5)).abs();
+        
+        let local_point = point - self.min;
+        
+        if abs_x > abs_y && abs_x > abs_z {
+            // Cara izquierda o derecha (X dominante)
+            let u = (local_point.z / size.z).clamp(0.0, 1.0);
+            let v = 1.0 - (local_point.y / size.y).clamp(0.0, 1.0); // Invertir V
+            (u, v)
+        } else if abs_y > abs_x && abs_y > abs_z {
+            // Cara superior o inferior (Y dominante)
+            let u = (local_point.x / size.x).clamp(0.0, 1.0);
+            let v = (local_point.z / size.z).clamp(0.0, 1.0);
+            (u, v)
+        } else {
+            // Cara frontal o trasera (Z dominante)
+            let u = (local_point.x / size.x).clamp(0.0, 1.0);
+            let v = 1.0 - (local_point.y / size.y).clamp(0.0, 1.0); // Invertir V
+            (u, v)
+        }
+    }
 }

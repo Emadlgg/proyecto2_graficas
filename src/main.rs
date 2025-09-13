@@ -1,26 +1,24 @@
 mod framebuffer;
 mod color;
-mod sphere;
 mod cube;
 mod camera;
 mod material;
-mod ray_intersect;
 mod stats;
 
 use framebuffer::Framebuffer;
 use color::Color;
-use sphere::Sphere;
 use cube::Cube;
 use camera::OrbitCamera;
 use material::Material;
 use stats::RenderStats;
 use nalgebra_glm::Vec3;
 use minifb::{Key, Window, WindowOptions};
+use image::open;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
 
-// Definir Light directamente en main.rs temporalmente
+// Definir todas las estructuras directamente en main.rs
 pub struct Light {
     pub position: Vec3,
     pub color: Color,
@@ -37,63 +35,145 @@ impl Light {
     }
 }
 
-fn test_intersections(spheres: &[Sphere], cubes: &[Cube]) {
-    println!("\n=== Testing object intersections ===");
-    let test_ray_origin = Vec3::new(0.0, 0.0, 0.0);
-    let test_ray_direction = Vec3::new(0.0, 0.0, -1.0);
-    
-    for (i, sphere) in spheres.iter().enumerate() {
-        if let Some(distance) = sphere.ray_intersect(&test_ray_origin, &test_ray_direction) {
-            println!("Sphere {}: HIT at distance {:.2}", i, distance);
-        } else {
-            println!("Sphere {}: MISS", i);
+pub struct Plane {
+    pub point: Vec3,
+    pub normal: Vec3,
+    pub material: Material,
+}
+
+impl Plane {
+    pub fn new(point: Vec3, normal: Vec3, material: Material) -> Self {
+        Plane {
+            point,
+            normal: nalgebra_glm::normalize(&normal),
+            material,
         }
     }
     
-    for (i, cube) in cubes.iter().enumerate() {
-        if let Some(distance) = cube.ray_intersect(&test_ray_origin, &test_ray_direction) {
-            println!("Cube {}: HIT at distance {:.2}", i, distance);
+    pub fn ray_intersect(&self, ray_origin: &Vec3, ray_direction: &Vec3) -> Option<f32> {
+        let denom = nalgebra_glm::dot(&self.normal, ray_direction);
+        
+        if denom.abs() < 1e-6 {
+            return None;
+        }
+        
+        let t = nalgebra_glm::dot(&(self.point - ray_origin), &self.normal) / denom;
+        
+        if t > 0.001 {
+            Some(t)
         } else {
-            println!("Cube {}: MISS", i);
+            None
         }
     }
-    println!("====================================\n");
+    
+    pub fn get_normal(&self, _point: &Vec3) -> Vec3 {
+        self.normal
+    }
+}
+
+// Estructura para manejar texturas
+#[derive(Clone)]
+pub struct Texture {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>, // RGB data (3 bytes por pixel)
+}
+
+impl Texture {
+    pub fn load_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let img = open(path)?;
+        let rgb_img = img.to_rgb8();
+        let (width, height) = rgb_img.dimensions();
+        let data = rgb_img.into_raw();
+        
+        Ok(Texture {
+            width,
+            height,
+            data,
+        })
+    }
+    
+    pub fn sample(&self, u: f32, v: f32) -> Color {
+        // Clamp UV coordinates to [0, 1]
+        let u = u.clamp(0.0, 1.0);
+        let v = v.clamp(0.0, 1.0);
+        
+        // Convert UV to pixel coordinates
+        let x = ((u * self.width as f32) as u32).min(self.width - 1);
+        let y = ((v * self.height as f32) as u32).min(self.height - 1);
+        
+        // Calculate index in RGB data
+        let index = ((y * self.width + x) * 3) as usize;
+        
+        if index + 2 < self.data.len() {
+            Color::new(
+                self.data[index],     // R
+                self.data[index + 1], // G
+                self.data[index + 2], // B
+            )
+        } else {
+            Color::new(255, 0, 255) // Magenta for errors
+        }
+    }
+    
+    // Crear textura de prueba procedural si no hay archivo
+    pub fn create_test_texture() -> Self {
+        let size = 64;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        
+        for y in 0..size {
+            for x in 0..size {
+                // Crear patrón de tablero de ajedrez
+                let checker = ((x / 8) + (y / 8)) % 2;
+                if checker == 0 {
+                    data.extend_from_slice(&[139, 90, 43]); // Marrón
+                } else {
+                    data.extend_from_slice(&[101, 67, 33]); // Marrón más oscuro
+                }
+            }
+        }
+        
+        Texture {
+            width: size,
+            height: size,
+            data,
+        }
+    }
 }
 
 fn main() {
     let mut framebuffer = Framebuffer::new(WIDTH, HEIGHT);
     
-    // Crear cámara orbital centrada en la escena del laboratorio
+    // Cargar textura (con fallback a textura procedural)
+    println!("Loading texture...");
+    let texture = match Texture::load_from_file("texture.png") {
+        Ok(tex) => {
+            println!("Texture loaded successfully: {}x{}", tex.width, tex.height);
+            tex
+        }
+        Err(_) => {
+            println!("Could not load texture.png, using procedural texture");
+            Texture::create_test_texture()
+        }
+    };
+    
+    // Crear cámara orbital con vista inicial en ángulo
     let mut camera = OrbitCamera::new(
-        Vec3::new(0.0, -0.5, -6.0), // Target: centro del laboratorio
-        8.0 // Distancia inicial
+        Vec3::new(0.0, 0.0, -5.0), // Target: el cubo
+        6.0 // Distancia inicial
     );
+    // Establecer ángulos iniciales para vista 3D
+    camera.orbit(0.7, 0.3); // 40° horizontal, 17° vertical
     
-    // Crear escena del laboratorio de alquimia
-    let spheres = vec![
-        // Frasco redondo grande (esfera de vidrio)
-        Sphere::new(Vec3::new(-1.0, 0.0, -5.0), 0.6, Material::clear_glass()),
-        
-        // Cristal mágico (esfera emisiva)
-        Sphere::new(Vec3::new(0.0, 0.5, -4.5), 0.3, Material::magic_crystal()),
-        
-        // Poción pequeña (esfera pequeña)
-        Sphere::new(Vec3::new(0.8, -0.7, -4.8), 0.2, Material::rusty_metal()),
-    ];
+    // Crear cubo con material texturizado
+    let cube = Cube::new(Vec3::new(0.0, 0.0, -5.0), 2.0, Material::old_wood_textured());
     
-    let cubes = vec![
-        // Mesa del laboratorio (cubo grande, madera)
-        Cube::new(Vec3::new(0.0, -1.5, -6.0), 3.0, Material::old_wood()),
-        
-        // Libro/grimorio (cubo pequeño)
-        Cube::new(Vec3::new(1.5, -0.8, -5.5), 0.4, Material::old_wood()),
-        
-        // Caldero (cubo metálico)
-        Cube::new(Vec3::new(-1.8, -0.5, -7.0), 0.8, Material::rusty_metal()),
-        
-        // Pared trasera (cubo grande de piedra)
-        Cube::new(Vec3::new(0.0, 1.0, -10.0), 6.0, Material::stone_wall()),
-    ];
+    // Crear suelo para que se vean las sombras
+    let floor = Plane::new(
+        Vec3::new(0.0, -2.0, -5.0), // Punto en el suelo (debajo del cubo)
+        Vec3::new(0.0, 1.0, 0.0),   // Normal apuntando hacia arriba
+        Material::stone_wall()      // Material de piedra gris
+    );
     
     // Crear luces para el laboratorio
     let lights = vec![
@@ -109,7 +189,7 @@ fn main() {
     
     // Crear ventana
     let mut window = Window::new(
-        "Alchemy Lab Raytracer - With Shadows",
+        "Textured Cube - With Shadows",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
@@ -119,11 +199,26 @@ fn main() {
     
     window.set_target_fps(60);
     
-    // Test inicial
-    test_intersections(&spheres, &cubes);
+    // Test inicial simplificado
+    println!("Testing cube and floor intersections...");
+    let test_ray_origin = Vec3::new(0.0, 0.0, 0.0);
+    let test_ray_direction = Vec3::new(0.0, 0.0, -1.0);
+    
+    if let Some(distance) = cube.ray_intersect(&test_ray_origin, &test_ray_direction) {
+        println!("Cube: HIT at distance {:.2}", distance);
+    } else {
+        println!("Cube: MISS");
+    }
+    
+    if let Some(distance) = floor.ray_intersect(&test_ray_origin, &test_ray_direction) {
+        println!("Floor: HIT at distance {:.2}", distance);
+    } else {
+        println!("Floor: MISS");
+    }
+    println!();
     
     println!("\n=== CONTROLS ===");
-    println!("Arrow Keys: Orbit around scene");
+    println!("Arrow Keys: Orbit around cube");
     println!("W/S: Zoom in/out");
     println!("Escape: Exit");
     println!("================\n");
@@ -158,11 +253,11 @@ fn main() {
         
         stats.reset();
         
-        render(&mut framebuffer, &spheres, &cubes, &lights, &camera, &mut stats);
+        render(&mut framebuffer, &cube, &floor, &lights, &camera, &texture, &mut stats);
         
         if frame_count % 120 == 0 {
             println!("\n--- Frame {} ---", frame_count);
-            println!("Spheres: {}, Cubes: {}", spheres.len(), cubes.len());
+            println!("Textured cube + Floor rendering");
             println!("Camera: distance {:.1}, yaw {:.2}, pitch {:.2}", 
                 camera.distance, camera.yaw, camera.pitch);
             stats.print_summary();
@@ -175,7 +270,7 @@ fn main() {
     }
 }
 
-fn render(framebuffer: &mut Framebuffer, spheres: &[Sphere], cubes: &[Cube], lights: &[Light], camera: &OrbitCamera, stats: &mut RenderStats) {
+fn render(framebuffer: &mut Framebuffer, cube: &Cube, floor: &Plane, lights: &[Light], camera: &OrbitCamera, texture: &Texture, stats: &mut RenderStats) {
     let width = framebuffer.width as f32;
     let height = framebuffer.height as f32;
     let aspect_ratio = width / height;
@@ -188,7 +283,7 @@ fn render(framebuffer: &mut Framebuffer, spheres: &[Sphere], cubes: &[Cube], lig
             
             // Usar la cámara para calcular la dirección del rayo
             let ray_direction = camera.get_ray_direction(screen_x, screen_y);
-            let pixel_color = cast_ray(&camera.eye, &ray_direction, spheres, cubes, lights, stats);
+            let pixel_color = cast_ray(&camera.eye, &ray_direction, cube, floor, lights, texture, stats);
             
             framebuffer.set_current_color(pixel_color);
             framebuffer.point(x, y);
@@ -196,75 +291,91 @@ fn render(framebuffer: &mut Framebuffer, spheres: &[Sphere], cubes: &[Cube], lig
     }
 }
 
-fn cast_ray(ray_origin: &Vec3, ray_direction: &Vec3, spheres: &[Sphere], cubes: &[Cube], lights: &[Light], stats: &mut RenderStats) -> Color {
+fn cast_ray(ray_origin: &Vec3, ray_direction: &Vec3, cube: &Cube, floor: &Plane, lights: &[Light], texture: &Texture, stats: &mut RenderStats) -> Color {
+    let background_color = Color::new(15, 25, 35);
     let mut closest_distance = f32::INFINITY;
     let mut hit_material: Option<&Material> = None;
     let mut hit_point = Vec3::new(0.0, 0.0, 0.0);
     let mut hit_normal = Vec3::new(0.0, 0.0, 0.0);
-    let background_color = Color::new(15, 25, 35);
+    let mut hit_object = 0; // 0 = none, 1 = cube, 2 = floor
     
     stats.rays_cast += 1;
     
-    // Probar intersección con esferas
-    for sphere in spheres.iter() {
-        stats.objects_tested += 1;
-        
-        if let Some(distance) = sphere.ray_intersect(ray_origin, ray_direction) 
-            && distance < closest_distance 
-            && distance > 0.001 
-        {
-            closest_distance = distance;
-            hit_material = Some(&sphere.material);
-            hit_point = ray_origin + ray_direction * distance;
-            hit_normal = nalgebra_glm::normalize(&(hit_point - sphere.center));
-        }
+    // Probar intersección con el cubo
+    stats.objects_tested += 1;
+    if let Some(distance) = cube.ray_intersect(ray_origin, ray_direction) && distance > 0.001 && distance < closest_distance {
+        closest_distance = distance;
+        hit_material = Some(&cube.material);
+        hit_point = ray_origin + ray_direction * distance;
+        hit_normal = cube.get_normal(&hit_point);
+        hit_object = 1;
     }
     
-    // Probar intersección con cubos
-    for cube in cubes.iter() {
-        stats.objects_tested += 1;
-        
-        if let Some(distance) = cube.ray_intersect(ray_origin, ray_direction) 
-            && distance < closest_distance 
-            && distance > 0.001 
-        {
-            closest_distance = distance;
-            hit_material = Some(&cube.material);
-            hit_point = ray_origin + ray_direction * distance;
-            hit_normal = cube.get_normal(&hit_point);
-        }
+    // Probar intersección con el suelo
+    stats.objects_tested += 1;
+    if let Some(distance) = floor.ray_intersect(ray_origin, ray_direction) && distance > 0.001 && distance < closest_distance {
+        closest_distance = distance;
+        hit_material = Some(&floor.material);
+        hit_point = ray_origin + ray_direction * distance;
+        hit_normal = floor.get_normal(&hit_point);
+        hit_object = 2;
     }
     
     if let Some(material) = hit_material {
         stats.hits += 1;
         
-        // Calcular iluminación con sombras
-        let lit_color = calculate_lighting(&hit_point, &hit_normal, material, lights, spheres, cubes);
-        lit_color
+        // Calcular iluminación con sombras y texturas
+        calculate_lighting(&hit_point, &hit_normal, material, lights, cube, floor, texture, hit_object)
     } else {
         stats.misses += 1;
         background_color
     }
 }
 
-fn calculate_lighting(hit_point: &Vec3, normal: &Vec3, material: &Material, lights: &[Light], spheres: &[Sphere], cubes: &[Cube]) -> Color {
-    let mut total_r = 0.0;
-    let mut total_g = 0.0;
-    let mut total_b = 0.0;
+fn calculate_lighting(hit_point: &Vec3, normal: &Vec3, material: &Material, lights: &[Light], cube: &Cube, floor: &Plane, texture: &Texture, hit_object: u8) -> Color {
+    let mut total_r: f32 = 0.0;
+    let mut total_g: f32 = 0.0;
+    let mut total_b: f32 = 0.0;
+    
+    // Obtener color base (de textura o material)
+    let base_color = if hit_object == 1 && material.has_texture {
+        // Es el cubo y tiene textura
+        let (u, v) = cube.get_uv_coordinates(hit_point);
+        texture.sample(u, v)
+    } else {
+        // Usar color del material
+        material.diffuse
+    };
     
     // Luz ambiental
     let ambient_strength = 0.1;
-    total_r += material.diffuse.r as f32 * ambient_strength;
-    total_g += material.diffuse.g as f32 * ambient_strength;
-    total_b += material.diffuse.b as f32 * ambient_strength;
+    total_r += base_color.r as f32 * ambient_strength;
+    total_g += base_color.g as f32 * ambient_strength;
+    total_b += base_color.b as f32 * ambient_strength;
     
     for light in lights {
         let light_dir = nalgebra_glm::normalize(&(light.position - hit_point));
         let light_distance = nalgebra_glm::distance(&light.position, hit_point);
         
-        // Verificar si hay sombra
+        // Verificar si hay sombra (probar tanto el cubo como el suelo)
         let shadow_ray_origin = hit_point + normal * 0.001;
-        let in_shadow = is_in_shadow(&shadow_ray_origin, &light_dir, light_distance, spheres, cubes);
+        let mut in_shadow = false;
+        
+        // Verificar si el cubo proyecta sombra
+        if let Some(shadow_distance) = cube.ray_intersect(&shadow_ray_origin, &light_dir) {
+            if shadow_distance > 0.001 && shadow_distance < light_distance {
+                in_shadow = true;
+            }
+        }
+        
+        // Verificar si el suelo proyecta sombra (aunque es raro)
+        if !in_shadow {
+            if let Some(shadow_distance) = floor.ray_intersect(&shadow_ray_origin, &light_dir) {
+                if shadow_distance > 0.001 && shadow_distance < light_distance {
+                    in_shadow = true;
+                }
+            }
+        }
         
         if !in_shadow {
             // Calcular luz difusa
@@ -273,9 +384,9 @@ fn calculate_lighting(hit_point: &Vec3, normal: &Vec3, material: &Material, ligh
             
             let light_contribution = diff * light.intensity * attenuation;
             
-            total_r += material.diffuse.r as f32 * light.color.r as f32 / 255.0 * light_contribution;
-            total_g += material.diffuse.g as f32 * light.color.g as f32 / 255.0 * light_contribution;
-            total_b += material.diffuse.b as f32 * light.color.b as f32 / 255.0 * light_contribution;
+            total_r += base_color.r as f32 * light.color.r as f32 / 255.0 * light_contribution;
+            total_g += base_color.g as f32 * light.color.g as f32 / 255.0 * light_contribution;
+            total_b += base_color.b as f32 * light.color.b as f32 / 255.0 * light_contribution;
         }
     }
     
@@ -284,25 +395,4 @@ fn calculate_lighting(hit_point: &Vec3, normal: &Vec3, material: &Material, ligh
         total_g.min(255.0) as u8,
         total_b.min(255.0) as u8,
     )
-}
-
-fn is_in_shadow(ray_origin: &Vec3, light_dir: &Vec3, light_distance: f32, spheres: &[Sphere], cubes: &[Cube]) -> bool {
-    // Verificar si hay algún objeto entre el punto y la luz
-    for sphere in spheres {
-        if let Some(distance) = sphere.ray_intersect(ray_origin, light_dir) {
-            if distance > 0.001 && distance < light_distance {
-                return true;
-            }
-        }
-    }
-    
-    for cube in cubes {
-        if let Some(distance) = cube.ray_intersect(ray_origin, light_dir) {
-            if distance > 0.001 && distance < light_distance {
-                return true;
-            }
-        }
-    }
-    
-    false
 }
