@@ -1,6 +1,7 @@
 use nalgebra_glm::Vec3;
 use crate::material::Material;
 
+#[derive(Clone)]
 pub struct Cube {
     pub min: Vec3,
     pub max: Vec3,
