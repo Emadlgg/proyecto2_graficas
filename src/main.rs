@@ -175,6 +175,221 @@ impl Texture {
         }
         Texture { width: 32, height: 32, data }
     }
+    
+    pub fn create_obsidian_texture() -> Self {
+        let size = 32;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let noise1 = ((x * 43 + y * 23) % 16) as f32 / 16.0;
+                let noise2 = ((x * 17 + y * 31) % 8) as f32 / 8.0;
+                let combined_noise = (noise1 + noise2 * 0.2).clamp(0.0, 1.0);
+                
+                // Obsidiana: negro con detalles púrpuras
+                let base_intensity = 15.0 + combined_noise * 25.0;
+                let purple_tint = if combined_noise > 0.8 { 20.0 } else { 5.0 };
+                
+                let r = (base_intensity + purple_tint * 0.6) as u8;
+                let g = base_intensity as u8;
+                let b = (base_intensity + purple_tint) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: 32, height: 32, data }
+    }
+}
+
+#[derive(Clone)]
+pub struct Skybox {
+    pub px: Texture, // positive X (right)
+    pub nx: Texture, // negative X (left)
+    pub py: Texture, // positive Y (top)
+    pub ny: Texture, // negative Y (bottom)
+    pub pz: Texture, // positive Z (front)
+    pub nz: Texture, // negative Z (back)
+}
+
+impl Skybox {
+    pub fn create_procedural_sky() -> Self {
+        Skybox {
+            px: Self::create_sky_texture_right(),
+            nx: Self::create_sky_texture_left(), 
+            py: Self::create_sky_texture_top(),
+            ny: Self::create_sky_texture_bottom(),
+            pz: Self::create_sky_texture_front(),
+            nz: Self::create_sky_texture_back(),
+        }
+    }
+
+    pub fn load_from_files() -> Result<Self, Box<dyn std::error::Error>> {
+        match Self::try_load_from_files() {
+            Ok(skybox) => {
+                println!("Skybox loaded from files successfully!");
+                Ok(skybox)
+            },
+            Err(e) => {
+                println!("Failed to load skybox files: {}", e);
+                println!("Using procedural skybox instead...");
+                Ok(Self::create_procedural_sky())
+            }
+        }
+    }
+    
+    fn try_load_from_files() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Skybox {
+            px: Texture::load_from_file("px.png")?,
+            nx: Texture::load_from_file("nx.png")?,
+            py: Texture::load_from_file("py.png")?,
+            ny: Texture::load_from_file("ny.png")?,
+            pz: Texture::load_from_file("pz.png")?,
+            nz: Texture::load_from_file("nz.png")?,
+        })
+    }
+    
+    fn create_sky_texture_top() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let cloud_noise = ((x * 7 + y * 13) % 64) as f32 / 64.0;
+                let cloud_intensity = if cloud_noise > 0.7 { 0.8 } else { 0.2 };
+                
+                let base_r = (130.0 + cloud_intensity * 100.0) as u8;
+                let base_g = (180.0 + cloud_intensity * 50.0) as u8;
+                let base_b = 255;
+                
+                data.extend_from_slice(&[base_r, base_g, base_b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    fn create_sky_texture_bottom() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let fade = y as f32 / size as f32;
+                let r = (80.0 + fade * 50.0) as u8;
+                let g = (120.0 + fade * 60.0) as u8;
+                let b = (200.0 + fade * 55.0) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    fn create_sky_texture_front() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let fade = (size - y) as f32 / size as f32;
+                let sun_x = size / 4;
+                let sun_y = size / 3;
+                let dist = ((x as f32 - sun_x as f32).powi(2) + (y as f32 - sun_y as f32).powi(2)).sqrt();
+                let sun_effect = if dist < 30.0 { 0.8 } else { 0.0 };
+                
+                let r = (100.0 + fade * 80.0 + sun_effect * 100.0) as u8;
+                let g = (150.0 + fade * 80.0 + sun_effect * 80.0) as u8;
+                let b = (220.0 + fade * 35.0) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    fn create_sky_texture_back() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let fade = (size - y) as f32 / size as f32;
+                let r = (90.0 + fade * 60.0) as u8;
+                let g = (140.0 + fade * 70.0) as u8;
+                let b = (210.0 + fade * 45.0) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    fn create_sky_texture_left() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let fade = (size - y) as f32 / size as f32;
+                let r = (95.0 + fade * 65.0) as u8;
+                let g = (145.0 + fade * 75.0) as u8;
+                let b = (215.0 + fade * 40.0) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    fn create_sky_texture_right() -> Texture {
+        let size = 256;
+        let mut data = Vec::with_capacity((size * size * 3) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let fade = (size - y) as f32 / size as f32;
+                let r = (105.0 + fade * 55.0) as u8;
+                let g = (155.0 + fade * 65.0) as u8;
+                let b = (225.0 + fade * 30.0) as u8;
+                
+                data.extend_from_slice(&[r, g, b]);
+            }
+        }
+        Texture { width: size, height: size, data }
+    }
+    
+    pub fn sample(&self, direction: &Vec3) -> Color {
+        let dir = nalgebra_glm::normalize(direction);
+        let abs_x = dir.x.abs();
+        let abs_y = dir.y.abs();
+        let abs_z = dir.z.abs();
+        
+        let (texture, u, v) = if abs_x >= abs_y && abs_x >= abs_z {
+            if dir.x > 0.0 {
+                let u = (-dir.z / abs_x + 1.0) * 0.5;
+                let v = (-dir.y / abs_x + 1.0) * 0.5;
+                (&self.px, u, v)
+            } else {
+                let u = (dir.z / abs_x + 1.0) * 0.5;
+                let v = (-dir.y / abs_x + 1.0) * 0.5;
+                (&self.nx, u, v)
+            }
+        } else if abs_y >= abs_x && abs_y >= abs_z {
+            if dir.y > 0.0 {
+                let u = (dir.x / abs_y + 1.0) * 0.5;
+                let v = (dir.z / abs_y + 1.0) * 0.5;
+                (&self.py, u, v)
+            } else {
+                let u = (dir.x / abs_y + 1.0) * 0.5;
+                let v = (-dir.z / abs_y + 1.0) * 0.5;
+                (&self.ny, u, v)
+            }
+        } else {
+            if dir.z > 0.0 {
+                let u = (dir.x / abs_z + 1.0) * 0.5;
+                let v = (-dir.y / abs_z + 1.0) * 0.5;
+                (&self.pz, u, v)
+            } else {
+                let u = (-dir.x / abs_z + 1.0) * 0.5;
+                let v = (-dir.y / abs_z + 1.0) * 0.5;
+                (&self.nz, u, v)
+            }
+        };
+        
+        texture.sample(u, v)
+    }
 }
 
 pub struct OptimizedDiorama {
@@ -223,7 +438,6 @@ impl OptimizedDiorama {
             }
         }
         
-        // NO CREAR PLANOS - agua y lava son cubos ahora
         Self::add_water_areas(&mut water_planes, &terrain_heights, center, cube_size, spacing, offset);
         Self::add_lava_areas(&mut lava_planes, &terrain_heights, center, cube_size, spacing, offset);
         
@@ -242,48 +456,74 @@ impl OptimizedDiorama {
         for z in 0..grid_size {
             for x in 0..grid_size {
                 let mut height = 1;
+                
+                // Paredes altas en bordes
                 if z <= 2 { height = 6; }
                 if x <= 2 { height = 6; }
                 if x >= grid_size - 3 && !(z >= 5 && z <= 7) { height = 6; }
                 if z >= grid_size - 3 && !(x >= 3 && x <= 8) { height = 4; }
-                if x >= 4 && x <= 7 && z >= 4 && z <= 7 { height = 3; }
-                if x >= 5 && x <= 6 && z >= 5 && z <= 6 { height = 4; }
-                if x >= 8 && x <= 10 && z >= 8 && z <= 10 { height = 2; }
+                
+                // Área central más baja
+                if x >= 4 && x <= 7 && z >= 4 && z <= 7 { height = 2; }
+                
+                // CÉSPED: esquina inferior derecha (desde vista arriba)
+                if x >= 9 && x <= 11 && z >= 9 && z <= 11 { height = 3; }
+                
+                // Base para agua 
+                if x >= 5 && x <= 11 && z >= 5 && z <= 11 { height = height.max(2); }
+                
+                // Base para lava 
+                if x >= 0 && x <= 8 && z >= 0 && z <= 8 { height = height.max(2); }
+                
                 heights[z][x] = height;
             }
         }
         heights
     }
     
-    // MATERIALES INCLUYENDO AGUA Y LAVA COMO CUBOS
+    // AGUA Y LAVA EXPANDIDAS - CAMBIOS PRINCIPALES AQUÍ
     fn determine_material(x: usize, z: usize, y_level: usize, max_height: usize) -> Material {
-        // AGUA: cubos de agua en área inferior derecha
-        if y_level == 1 && x >= 8 && x <= 10 && z >= 8 && z <= 10 {
+        // AGUA EXPANDIDA: área 7x7 en esquina inferior derecha
+        if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return Material::water_surface();
         }
         
-        // LAVA: cubos de lava en área inferior izquierda
-        if y_level == 1 && x >= 2 && x <= 3 && z >= 2 && z <= 3 {
+        // LAVA EXPANDIDA: área 9x9 en esquina superior izquierda  
+        if y_level == 1 && x >= 0 && x <= 8 && z >= 0 && z <= 8 {
             return Material::lava_surface();
+        }
+        
+        // OBSIDIANA EN EL CENTRO: bloques específicos
+        if y_level >= 1 && y_level <= 2 && x >= 4 && x <= 7 && z >= 4 && z <= 7 {
+            return Material::obsidian_block();
         }
         
         // MATERIALES NORMALES
         if y_level == max_height {
-            if x >= 4 && x <= 7 && z >= 4 && z <= 7 {
+            // CÉSPED EN TODA LA ESCALERA: base + escalones
+            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) || // Base original
+               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||   // Escalón medio
+               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {    // Escalón alto
                 Material::grass_top()
             } else {
                 Material::stone_layer()
             }
         } else if y_level >= max_height - 1 {
-            Material::dirt_layer()
+            // DIRT debajo del césped en toda la escalera
+            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) || // Base original
+               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||   // Escalón medio  
+               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {    // Escalón alto
+                Material::dirt_layer()
+            } else {
+                Material::dirt_layer()
+            }
         } else {
             Material::stone_layer()
         }
     }
     
-    // PERMITIR CUBOS DE AGUA Y LAVA
     fn should_place_cube(x: usize, z: usize, y_level: usize, _max_height: usize, grid_size: usize) -> bool {
-        // Túneles pero PERMITIR agua/lava en y=1
+        // Túneles existentes
         if y_level >= 2 && y_level <= 2 && z >= 5 && z <= 7 && x >= 3 && x <= grid_size - 3 {
             return false;
         }
@@ -292,29 +532,35 @@ impl OptimizedDiorama {
             return false;
         }
         
-        // COLOCAR cubos de agua
-        if y_level == 1 && x >= 8 && x <= 10 && z >= 8 && z <= 10 {
+        // AGUA: permitir cubos en nivel 1, quitar SOLO algunos específicos en nivel 2
+        if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return true;
         }
         
-        // COLOCAR cubos de lava
-        if y_level == 1 && x >= 2 && x <= 3 && z >= 2 && z <= 3 {
+        // Quitar SOLO algunos cubos específicos encima del agua (no todos)
+        if y_level == 2 && x >= 7 && x <= 9 && z >= 7 && z <= 9 {
+            return false;  // Solo quita un área 3x3 en el centro del agua
+        }
+        
+        // LAVA: permitir cubos en nivel 1, quitar SOLO algunos específicos en nivel 2
+        if y_level == 1 && x >= 0 && x <= 8 && z >= 0 && z <= 8 {
             return true;
+        }
+        
+        // Quitar SOLO algunos cubos específicos encima de la lava (no todos)
+        if y_level == 2 && x >= 2 && x <= 6 && z >= 2 && z <= 6 {
+            return false;  // Solo quita un área 5x5 en el centro de la lava
         }
         
         true
     }
     
-    // FUNCIONES VACÍAS - NO CREAR PLANOS
     fn add_water_areas(_water_planes: &mut Vec<Plane>, _heights: &Vec<Vec<usize>>, _center: Vec3, _cube_size: f32, _spacing: f32, _offset: f32) {
-        // VACÍO - agua son cubos ahora
     }
     
     fn add_lava_areas(_lava_planes: &mut Vec<Plane>, _heights: &Vec<Vec<usize>>, _center: Vec3, _cube_size: f32, _spacing: f32, _offset: f32) {
-        // VACÍO - lava son cubos ahora
     }
     
-    // SOLO CUBOS
     pub fn ray_intersect_fast(&self, ray_origin: &Vec3, ray_direction: &Vec3) -> Option<(usize, f32, u8)> {
         if !self.ray_intersects_bbox(ray_origin, ray_direction) {
             return None;
@@ -378,7 +624,6 @@ impl OptimizedDiorama {
     }
 }
 
-// Utilidades de ray math
 fn reflect(dir: &Vec3, normal: &Vec3) -> Vec3 { *dir - *normal * 2.0 * dot(dir, normal) }
 
 fn refract(incident: &Vec3, normal: &Vec3, eta: f32) -> Option<Vec3> {
@@ -406,14 +651,9 @@ fn fresnel(incident: &Vec3, normal: &Vec3, ior: f32) -> f32 {
     }
 }
 
-fn sample_sky(sky_texture: &Option<Texture>, dir: &Vec3) -> Color {
-    if let Some(tex) = sky_texture {
-        let d = normalize(dir);
-        let theta = d.z.atan2(d.x);
-        let phi = (d.y).asin();
-        let u = 1.0 - (theta + PI) / (2.0 * PI);
-        let v = 0.5 - phi / PI;
-        tex.sample(u, v)
+fn sample_sky(skybox: &Option<Skybox>, dir: &Vec3) -> Color {
+    if let Some(sb) = skybox {
+        sb.sample(dir)
     } else {
         if dir.y > 0.1 {
             let t = ((dir.y - 0.1) / 0.9).clamp(0.0, 1.0);
@@ -424,13 +664,12 @@ fn sample_sky(sky_texture: &Option<Texture>, dir: &Vec3) -> Color {
     }
 }
 
-// CAST RAY SIN PLANOS DE AGUA/LAVA
 fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama: &OptimizedDiorama, floor: &Plane, 
                                 lights: &[Light], grass_texture: &Texture, dirt_texture: &Texture, stone_texture: &Texture, 
-                                water_texture: &Texture, lava_texture: &Texture, sky_tex: &Option<Texture>, stats: &mut RenderStats,
-                                depth: u32) -> Color {
+                                water_texture: &Texture, lava_texture: &Texture, obsidian_texture: &Texture, 
+                                skybox: &Option<Skybox>, stats: &mut RenderStats, depth: u32) -> Color {
     if depth == 0 {
-        return sample_sky(sky_tex, ray_direction);
+        return sample_sky(skybox, ray_direction);
     }
 
     let mut closest_distance = f32::INFINITY;
@@ -442,7 +681,6 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
 
     stats.rays_cast += 1;
 
-    // SOLO CUBOS (incluyendo agua/lava como cubos)
     if let Some((object_index, distance, object_type)) = diorama.ray_intersect_fast(ray_origin, ray_direction) {
         if distance > 0.001 && distance < closest_distance && object_type == 1 {
             closest_distance = distance;
@@ -456,7 +694,6 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
         }
     }
 
-    // floor
     if let Some(distance) = floor.ray_intersect(ray_origin, ray_direction) {
         if distance > 0.001 && distance < closest_distance {
             hit_material = Some(floor.material);
@@ -468,15 +705,12 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
         }
     }
 
-    // SIN PLANOS DE AGUA/LAVA
-
     if hit_object == 0 {
         stats.misses += 1;
-        return sample_sky(sky_tex, ray_direction);
+        return sample_sky(skybox, ray_direction);
     }
 
     if let Some(material) = hit_material {
-        // base color INCLUYENDO cubos de agua/lava
         let base_color = if hit_object == 1 && material.has_texture && hit_cube.is_some() {
             let cube = hit_cube.unwrap();
             let (u, v) = cube.get_uv_coordinates(&hit_point);
@@ -484,15 +718,15 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
                 MaterialType::Grass => grass_texture.sample(u, v),
                 MaterialType::Dirt => dirt_texture.sample(u, v),
                 MaterialType::Stone => stone_texture.sample(u, v),
-                MaterialType::Water => water_texture.sample(u, v), // AGUA como cubo
-                MaterialType::Lava => lava_texture.sample(u, v),   // LAVA como cubo
+                MaterialType::Water => water_texture.sample(u, v),
+                MaterialType::Lava => lava_texture.sample(u, v),
+                MaterialType::Obsidian => obsidian_texture.sample(u, v),
                 _ => material.diffuse,
             }
         } else {
             material.diffuse
         };
 
-        // ambient INCLUYENDO agua/lava
         let ambient_strength = match material.material_type {
             MaterialType::Grass => 0.5,
             MaterialType::Stone => 0.25,
@@ -506,7 +740,6 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
         let mut total_g = base_color.g as f32 * ambient_strength;
         let mut total_b = base_color.b as f32 * ambient_strength;
 
-        // emission para CUBOS de lava
         if material.is_emissive() {
             let ec = material.emission_color();
             let ei = material.emission_intensity();
@@ -515,12 +748,10 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
             total_b += ec.b as f32 * ei * 2.0;
         }
 
-        // direct lights
         for (i, light) in lights.iter().enumerate() {
             let light_dir = normalize(&(light.position - hit_point));
             let light_distance = nalgebra_glm::distance(&light.position, &hit_point);
 
-            // shadow (no sombras para agua)
             let mut in_shadow = false;
             if i == 0 && material.material_type != MaterialType::Water {
                 let shadow_origin = hit_point + hit_normal * 0.001;
@@ -535,8 +766,8 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
                     MaterialType::Grass => 1.4,
                     MaterialType::Stone => 0.8,
                     MaterialType::Dirt => 1.0,
-                    MaterialType::Water => 2.0, // Agua muy reflectante
-                    MaterialType::Lava => 0.3,  // Lava menos afectada
+                    MaterialType::Water => 2.0,
+                    MaterialType::Lava => 0.3,
                     _ => 1.0,
                 };
 
@@ -554,28 +785,25 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
             total_b.min(255.0) as u8,
         );
 
-        // Reflection para CUBOS de agua
         let mut reflect_color = Color::black();
         if material.is_reflective() {
             let refl_dir = reflect(ray_direction, &hit_normal);
             let refl_origin = hit_point + hit_normal * 0.001;
             reflect_color = cast_ray_optimized_recursive(&refl_origin, &refl_dir, diorama, floor, lights,
                                                         grass_texture, dirt_texture, stone_texture,
-                                                        water_texture, lava_texture, sky_tex, stats, depth - 1);
+                                                        water_texture, lava_texture, obsidian_texture, skybox, stats, depth - 1);
         }
 
-        // Refraction para CUBOS de agua
         let mut refract_color = Color::black();
         if material.is_transparent() {
             if let Some(refr_dir) = refract(ray_direction, &hit_normal, material.refractive_index) {
                 let refr_origin = hit_point - hit_normal * 0.001;
                 refract_color = cast_ray_optimized_recursive(&refr_origin, &refr_dir, diorama, floor, lights,
                                                             grass_texture, dirt_texture, stone_texture,
-                                                            water_texture, lava_texture, sky_tex, stats, depth - 1);
+                                                            water_texture, lava_texture, obsidian_texture, skybox, stats, depth - 1);
             }
         }
 
-        // Fresnel mixing para CUBOS de agua
         if material.is_transparent() || material.is_reflective() {
             let kr = fresnel(ray_direction, &hit_normal, material.refractive_index).clamp(0.0, 1.0);
             if material.is_transparent() {
@@ -593,11 +821,10 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
 
         final_color.clamp()
     } else {
-        sample_sky(sky_tex, ray_direction)
+        sample_sky(skybox, ray_direction)
     }
 }
 
-// Helper traits para Color
 trait ColorVec3 {
     fn to_vec3(&self) -> Vec3;
     fn from_vec3(v: Vec3) -> Self;
@@ -644,9 +871,17 @@ fn main() {
         Err(_) => Texture::create_lava_texture()
     };
 
-    let sky_texture = match Texture::load_from_file("sky.png") {
-        Ok(tex) => Some(tex),
-        Err(_) => None
+    let obsidian_texture = match Texture::load_from_file("obsidian.png") {
+        Ok(tex) => tex,
+        Err(_) => Texture::create_obsidian_texture()
+    };
+
+    let skybox = match Skybox::load_from_files() {
+        Ok(sb) => Some(sb),
+        Err(e) => {
+            println!("Error loading skybox: {}", e);
+            None
+        }
     };
 
     let mut camera = OrbitCamera::new(Vec3::new(0.0, 2.0, 0.0), 10.0);
@@ -660,7 +895,7 @@ fn main() {
         Light::new(Vec3::new(6.0, 6.0, 3.0), Color::new(180, 200, 255), 0.9),
     ];
 
-    let mut window = Window::new("Minecraft Diorama - Water & Lava as Cubes", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
+    let mut window = Window::new("Minecraft Diorama - Water & Lava Expanded", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
     window.set_target_fps(30);
 
     let mut stats = RenderStats::new();
@@ -682,7 +917,7 @@ fn main() {
         stats.reset();
         render_optimized_recursive(&mut framebuffer, &diorama, &floor, &lights, &camera,
                                   &grass_texture, &dirt_texture, &stone_texture, &water_texture, &lava_texture,
-                                  &sky_texture, &mut stats);
+                                  &obsidian_texture, &skybox, &mut stats);
 
         window.update_with_buffer(&framebuffer.buffer, WIDTH, HEIGHT).unwrap();
     }
@@ -691,7 +926,8 @@ fn main() {
 fn render_optimized_recursive(framebuffer: &mut Framebuffer, diorama: &OptimizedDiorama, floor: &Plane, 
                               lights: &[Light], camera: &OrbitCamera, grass_texture: &Texture, 
                               dirt_texture: &Texture, stone_texture: &Texture, water_texture: &Texture, 
-                              lava_texture: &Texture, sky_texture: &Option<Texture>, stats: &mut RenderStats) {
+                              lava_texture: &Texture, obsidian_texture: &Texture, skybox: &Option<Skybox>, 
+                              stats: &mut RenderStats) {
     
     let width = framebuffer.width as f32;
     let height = framebuffer.height as f32;
@@ -709,7 +945,7 @@ fn render_optimized_recursive(framebuffer: &mut Framebuffer, diorama: &Optimized
             let ray_direction = camera.get_ray_direction(screen_x, screen_y);
             let pixel_color = cast_ray_optimized_recursive(&camera.eye, &ray_direction, diorama, floor, 
                                                          lights, grass_texture, dirt_texture, stone_texture, 
-                                                         water_texture, lava_texture, sky_texture, stats, MAX_DEPTH);
+                                                         water_texture, lava_texture, obsidian_texture, skybox, stats, MAX_DEPTH);
             
             framebuffer.set_current_color(pixel_color);
             for dy in 0..skip {
