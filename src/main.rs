@@ -185,7 +185,6 @@ impl Texture {
                 let noise2 = ((x * 17 + y * 31) % 8) as f32 / 8.0;
                 let combined_noise = (noise1 + noise2 * 0.2).clamp(0.0, 1.0);
                 
-                // Obsidiana: negro con detalles púrpuras
                 let base_intensity = 15.0 + combined_noise * 25.0;
                 let purple_tint = if combined_noise > 0.8 { 20.0 } else { 5.0 };
                 
@@ -202,12 +201,12 @@ impl Texture {
 
 #[derive(Clone)]
 pub struct Skybox {
-    pub px: Texture, // positive X (right)
-    pub nx: Texture, // negative X (left)
-    pub py: Texture, // positive Y (top)
-    pub ny: Texture, // negative Y (bottom)
-    pub pz: Texture, // positive Z (front)
-    pub nz: Texture, // negative Z (back)
+    pub px: Texture,
+    pub nx: Texture,
+    pub py: Texture,
+    pub ny: Texture,
+    pub pz: Texture,
+    pub nz: Texture,
 }
 
 impl Skybox {
@@ -352,38 +351,45 @@ impl Skybox {
     
     pub fn sample(&self, direction: &Vec3) -> Color {
         let dir = nalgebra_glm::normalize(direction);
-        let abs_x = dir.x.abs();
-        let abs_y = dir.y.abs();
-        let abs_z = dir.z.abs();
+        
+        let adjusted_dir = Vec3::new(
+            dir.x * 1.2,
+            dir.y * 0.8,
+            dir.z * 1.2
+        ).normalize();
+        
+        let abs_x = adjusted_dir.x.abs();
+        let abs_y = adjusted_dir.y.abs();
+        let abs_z = adjusted_dir.z.abs();
         
         let (texture, u, v) = if abs_x >= abs_y && abs_x >= abs_z {
-            if dir.x > 0.0 {
-                let u = (-dir.z / abs_x + 1.0) * 0.5;
-                let v = (-dir.y / abs_x + 1.0) * 0.5;
+            if adjusted_dir.x > 0.0 {
+                let u = (-adjusted_dir.z / abs_x + 1.0) * 0.5;
+                let v = (-adjusted_dir.y / abs_x + 1.0) * 0.5;
                 (&self.px, u, v)
             } else {
-                let u = (dir.z / abs_x + 1.0) * 0.5;
-                let v = (-dir.y / abs_x + 1.0) * 0.5;
+                let u = (adjusted_dir.z / abs_x + 1.0) * 0.5;
+                let v = (-adjusted_dir.y / abs_x + 1.0) * 0.5;
                 (&self.nx, u, v)
             }
         } else if abs_y >= abs_x && abs_y >= abs_z {
-            if dir.y > 0.0 {
-                let u = (dir.x / abs_y + 1.0) * 0.5;
-                let v = (dir.z / abs_y + 1.0) * 0.5;
+            if adjusted_dir.y > 0.0 {
+                let u = (adjusted_dir.x / abs_y + 1.0) * 0.5;
+                let v = (adjusted_dir.z / abs_y + 1.0) * 0.5;
                 (&self.py, u, v)
             } else {
-                let u = (dir.x / abs_y + 1.0) * 0.5;
-                let v = (-dir.z / abs_y + 1.0) * 0.5;
+                let u = (adjusted_dir.x / abs_y + 1.0) * 0.5;
+                let v = (-adjusted_dir.z / abs_y + 1.0) * 0.5;
                 (&self.ny, u, v)
             }
         } else {
-            if dir.z > 0.0 {
-                let u = (dir.x / abs_z + 1.0) * 0.5;
-                let v = (-dir.y / abs_z + 1.0) * 0.5;
+            if adjusted_dir.z > 0.0 {
+                let u = (adjusted_dir.x / abs_z + 1.0) * 0.5;
+                let v = (-adjusted_dir.y / abs_z + 1.0) * 0.5;
                 (&self.pz, u, v)
             } else {
-                let u = (-dir.x / abs_z + 1.0) * 0.5;
-                let v = (-dir.y / abs_z + 1.0) * 0.5;
+                let u = (-adjusted_dir.x / abs_z + 1.0) * 0.5;
+                let v = (-adjusted_dir.y / abs_z + 1.0) * 0.5;
                 (&self.nz, u, v)
             }
         };
@@ -451,68 +457,86 @@ impl OptimizedDiorama {
     }
     
     fn generate_terrain_heights(grid_size: usize) -> Vec<Vec<usize>> {
-        let mut heights = vec![vec![0; grid_size]; grid_size];
+        let mut heights = vec![vec![1; grid_size]; grid_size]; 
         
         for z in 0..grid_size {
             for x in 0..grid_size {
                 let mut height = 1;
                 
-                // Paredes altas en bordes
                 if z <= 2 { height = 6; }
                 if x <= 2 { height = 6; }
                 if x >= grid_size - 3 && !(z >= 5 && z <= 7) { height = 6; }
                 if z >= grid_size - 3 && !(x >= 3 && x <= 8) { height = 4; }
                 
-                // Área central más baja
                 if x >= 4 && x <= 7 && z >= 4 && z <= 7 { height = 2; }
                 
-                // CÉSPED: esquina inferior derecha (desde vista arriba)
                 if x >= 9 && x <= 11 && z >= 9 && z <= 11 { height = 3; }
+                if x >= 9 && x <= 11 && z >= 6 && z <= 8 { height = 4; }
+                if x >= 9 && x <= 11 && z >= 4 && z <= 5 { height = 5; }
                 
-                // Base para agua 
-                if x >= 5 && x <= 11 && z >= 5 && z <= 11 { height = height.max(2); }
+                if x >= 5 && x <= 11 && z >= 5 && z <= 11 { 
+                    height = height.max(2);
+                }
                 
-                // Base para lava 
-                if x >= 0 && x <= 8 && z >= 0 && z <= 8 { height = height.max(2); }
+                if x >= 0 && x <= 8 && z >= 0 && z <= 8 { 
+                    height = height.max(2); 
+                }
                 
                 heights[z][x] = height;
             }
         }
-        heights
+        
+        let mut smoothed = heights.clone();
+        for z in 1..grid_size-1 {
+            for x in 1..grid_size-1 {
+                if (x >= 5 && x <= 11 && z >= 5 && z <= 11) || 
+                (x >= 0 && x <= 8 && z >= 0 && z <= 8) {
+                    let neighbors = [
+                        heights[z-1][x], heights[z+1][x], 
+                        heights[z][x-1], heights[z][x+1]
+                    ];
+                    let avg = neighbors.iter().sum::<usize>() / 4;
+                    let current = heights[z][x];
+                    
+                    if (current as i32 - avg as i32).abs() > 1 {
+                        smoothed[z][x] = (current + avg) / 2;
+                    }
+                }
+            }
+        }
+        
+        smoothed
     }
     
-    // AGUA Y LAVA EXPANDIDAS - CAMBIOS PRINCIPALES AQUÍ
     fn determine_material(x: usize, z: usize, y_level: usize, max_height: usize) -> Material {
-        // AGUA EXPANDIDA: área 7x7 en esquina inferior derecha
         if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return Material::water_surface();
         }
         
-        // LAVA EXPANDIDA: área 9x9 en esquina superior izquierda  
         if y_level == 1 && x >= 0 && x <= 8 && z >= 0 && z <= 8 {
             return Material::lava_surface();
         }
         
-        // OBSIDIANA EN EL CENTRO: bloques específicos
-        if y_level >= 1 && y_level <= 2 && x >= 4 && x <= 7 && z >= 4 && z <= 7 {
-            return Material::obsidian_block();
+        if y_level >= 1 && y_level <= 2 {
+            if (x >= 3 && x <= 8 && z >= 3 && z <= 8) ||
+               (x >= 9 && x <= 10 && z >= 4 && z <= 8) ||
+               (x >= 4 && x <= 7 && z >= 9 && z <= 9) {
+                return Material::obsidian_block();
+            }
         }
         
-        // MATERIALES NORMALES
         if y_level == max_height {
-            // CÉSPED EN TODA LA ESCALERA: base + escalones
-            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) || // Base original
-               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||   // Escalón medio
-               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {    // Escalón alto
+            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) ||
+               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
+               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
                 Material::grass_top()
             } else {
                 Material::stone_layer()
             }
         } else if y_level >= max_height - 1 {
-            // DIRT debajo del césped en toda la escalera
-            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) || // Base original
-               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||   // Escalón medio  
-               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {    // Escalón alto
+            if (x >= 9 && x <= 11 && z >= 9 && z <= 11) ||
+               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
+               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
                 Material::dirt_layer()
             } else {
                 Material::dirt_layer()
@@ -523,7 +547,6 @@ impl OptimizedDiorama {
     }
     
     fn should_place_cube(x: usize, z: usize, y_level: usize, _max_height: usize, grid_size: usize) -> bool {
-        // Túneles existentes
         if y_level >= 2 && y_level <= 2 && z >= 5 && z <= 7 && x >= 3 && x <= grid_size - 3 {
             return false;
         }
@@ -532,24 +555,20 @@ impl OptimizedDiorama {
             return false;
         }
         
-        // AGUA: permitir cubos en nivel 1, quitar SOLO algunos específicos en nivel 2
         if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return true;
         }
         
-        // Quitar SOLO algunos cubos específicos encima del agua (no todos)
         if y_level == 2 && x >= 7 && x <= 9 && z >= 7 && z <= 9 {
-            return false;  // Solo quita un área 3x3 en el centro del agua
+            return false;
         }
         
-        // LAVA: permitir cubos en nivel 1, quitar SOLO algunos específicos en nivel 2
         if y_level == 1 && x >= 0 && x <= 8 && z >= 0 && z <= 8 {
             return true;
         }
         
-        // Quitar SOLO algunos cubos específicos encima de la lava (no todos)
         if y_level == 2 && x >= 2 && x <= 6 && z >= 2 && z <= 6 {
-            return false;  // Solo quita un área 5x5 en el centro de la lava
+            return false;
         }
         
         true
@@ -574,7 +593,7 @@ impl OptimizedDiorama {
                 if distance > 0.001 && distance < closest_distance {
                     closest_distance = distance;
                     closest_index = Some(i);
-                    if distance < 0.05 { break; }
+                    if distance < 0.1 { break; }
                 }
             }
         }
@@ -653,7 +672,8 @@ fn fresnel(incident: &Vec3, normal: &Vec3, ior: f32) -> f32 {
 
 fn sample_sky(skybox: &Option<Skybox>, dir: &Vec3) -> Color {
     if let Some(sb) = skybox {
-        sb.sample(dir)
+        let closer_dir = Vec3::new(dir.x * 0.3, dir.y * 0.7, dir.z * 0.3);
+        sb.sample(&closer_dir)
     } else {
         if dir.y > 0.1 {
             let t = ((dir.y - 0.1) / 0.9).clamp(0.0, 1.0);
@@ -676,7 +696,7 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
     let mut hit_material: Option<Material> = None;
     let mut hit_point = Vec3::new(0.0, 0.0, 0.0);
     let mut hit_normal = Vec3::new(0.0, 0.0, 0.0);
-    let mut hit_object = 0; // 0 none, 1 cube, 5 floor
+    let mut hit_object = 0;
     let mut hit_cube: Option<&Cube> = None;
 
     stats.rays_cast += 1;
@@ -733,6 +753,7 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
             MaterialType::Dirt => 0.35,
             MaterialType::Water => 0.15,
             MaterialType::Lava => 0.8,
+            MaterialType::Obsidian => 0.2,
             _ => 0.3,
         };
 
@@ -768,6 +789,7 @@ fn cast_ray_optimized_recursive(ray_origin: &Vec3, ray_direction: &Vec3, diorama
                     MaterialType::Dirt => 1.0,
                     MaterialType::Water => 2.0,
                     MaterialType::Lava => 0.3,
+                    MaterialType::Obsidian => 1.1,
                     _ => 1.0,
                 };
 
@@ -901,8 +923,8 @@ fn main() {
     let mut stats = RenderStats::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        let orbit_speed = 0.05;
-        let zoom_speed = 0.6;
+        let orbit_speed = if window.is_key_down(Key::LeftShift) { 0.1 } else { 0.05 };
+        let zoom_speed = if window.is_key_down(Key::LeftShift) { 1.2 } else { 0.6 };
         if window.is_key_down(Key::Left) { camera.orbit(-orbit_speed, 0.0); }
         if window.is_key_down(Key::Right) { camera.orbit(orbit_speed, 0.0); }
         if window.is_key_down(Key::Up) { camera.orbit(0.0, orbit_speed); }
