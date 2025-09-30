@@ -463,21 +463,26 @@ impl OptimizedDiorama {
             for x in 0..grid_size {
                 let mut height = 1;
                 
+                // Paredes altas en bordes
                 if z <= 2 { height = 6; }
                 if x <= 2 { height = 6; }
                 if x >= grid_size - 3 && !(z >= 5 && z <= 7) { height = 6; }
                 if z >= grid_size - 3 && !(x >= 3 && x <= 8) { height = 4; }
                 
+                // Área central más baja
                 if x >= 4 && x <= 7 && z >= 4 && z <= 7 { height = 2; }
                 
+                // CÉSPED: escalera (mantener igual)
                 if x >= 9 && x <= 11 && z >= 9 && z <= 11 { height = 3; }
                 if x >= 9 && x <= 11 && z >= 6 && z <= 8 { height = 4; }
                 if x >= 9 && x <= 11 && z >= 4 && z <= 5 { height = 5; }
                 
+                // AGUA: altura uniforme para eliminar fragmentación
                 if x >= 5 && x <= 11 && z >= 5 && z <= 11 { 
-                    height = height.max(2);
+                    height = height.max(2); // Asegurar altura mínima de 2
                 }
                 
+                // LAVA: altura uniforme para eliminar fragmentación
                 if x >= 0 && x <= 8 && z >= 0 && z <= 8 { 
                     height = height.max(2); 
                 }
@@ -508,7 +513,16 @@ impl OptimizedDiorama {
         smoothed
     }
     
+    // AGUA Y LAVA EXPANDIDAS - CAMBIOS PRINCIPALES AQUÍ
     fn determine_material(x: usize, z: usize, y_level: usize, max_height: usize) -> Material {
+        // Material para el techo (y_level = 7)
+        if y_level == 7 {
+            if (x >= 5 && x <= 11 && z >= 5 && z <= 11) ||
+            (x >= 0 && x <= 8 && z >= 0 && z <= 8) {
+                return Material::stone_layer();
+            }
+        }
+        
         if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return Material::water_surface();
         }
@@ -519,24 +533,24 @@ impl OptimizedDiorama {
         
         if y_level >= 1 && y_level <= 2 {
             if (x >= 3 && x <= 8 && z >= 3 && z <= 8) ||
-               (x >= 9 && x <= 10 && z >= 4 && z <= 8) ||
-               (x >= 4 && x <= 7 && z >= 9 && z <= 9) {
+            (x >= 9 && x <= 10 && z >= 4 && z <= 8) ||
+            (x >= 4 && x <= 7 && z >= 9 && z <= 9) {
                 return Material::obsidian_block();
             }
         }
         
         if y_level == max_height {
             if (x >= 9 && x <= 11 && z >= 9 && z <= 11) ||
-               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
-               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
+            (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
+            (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
                 Material::grass_top()
             } else {
                 Material::stone_layer()
             }
         } else if y_level >= max_height - 1 {
             if (x >= 9 && x <= 11 && z >= 9 && z <= 11) ||
-               (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
-               (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
+            (x >= 9 && x <= 11 && z >= 6 && z <= 8) ||
+            (x >= 9 && x <= 11 && z >= 4 && z <= 5) {
                 Material::dirt_layer()
             } else {
                 Material::dirt_layer()
@@ -546,7 +560,21 @@ impl OptimizedDiorama {
         }
     }
     
-    fn should_place_cube(x: usize, z: usize, y_level: usize, _max_height: usize, grid_size: usize) -> bool {
+    fn should_place_cube(x: usize, z: usize, y_level: usize, max_height: usize, grid_size: usize) -> bool {
+        // Agregar techo de piedra sobre las áreas de cueva
+        // El techo estará en y_level = 7 (un nivel arriba del techo actual)
+        if y_level == 7 {
+            // Techo sobre el área de agua (cueva derecha)
+            if x >= 5 && x <= 11 && z >= 5 && z <= 11 {
+                return true;
+            }
+            // Techo sobre el área de lava (cueva izquierda)
+            if x >= 0 && x <= 8 && z >= 0 && z <= 8 {
+                return true;
+            }
+        }
+        
+        // Mantener los huecos de las cuevas (no colocar cubos en estos niveles)
         if y_level >= 2 && y_level <= 2 && z >= 5 && z <= 7 && x >= 3 && x <= grid_size - 3 {
             return false;
         }
@@ -555,18 +583,22 @@ impl OptimizedDiorama {
             return false;
         }
         
+        // Área de agua en el nivel 1
         if y_level == 1 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
             return true;
         }
         
+        // Hueco en el centro del área de agua
         if y_level == 2 && x >= 7 && x <= 9 && z >= 7 && z <= 9 {
             return false;
         }
         
+        // Área de lava en el nivel 1
         if y_level == 1 && x >= 0 && x <= 8 && z >= 0 && z <= 8 {
             return true;
         }
         
+        // Hueco en el centro del área de lava
         if y_level == 2 && x >= 2 && x <= 6 && z >= 2 && z <= 6 {
             return false;
         }
